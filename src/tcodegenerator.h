@@ -71,6 +71,9 @@ private:
 	std::list<PoseDetection> m_keypoints;
 	std::list<PoseDetection> m_avgkeypoints;
 
+	bool m_poselowvolume;
+	std::chrono::high_resolution_clock::time_point m_poselastupdate;
+
 	// debug
 	float m_circlerad;
 

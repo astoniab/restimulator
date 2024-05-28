@@ -213,7 +213,7 @@ void GUIThread::HandleComboTrackChanged()
 
 void GUIThread::ReceivePoseMovement(const PoseMovement& pm, const PoseTrackingLocation& track)
 {
-	/*
+	
 	if ((int)track < PoseTrackingLocationName.size())
 	{
 		std::string info("Tracking ");
@@ -223,15 +223,18 @@ void GUIThread::ReceivePoseMovement(const PoseMovement& pm, const PoseTrackingLo
 		}
 		info += "\n";
 
-		if (pm.m_posetracking[(int)track].m_presence == KeypointPresence::KEYPOINT_PRESENCE_PRESENT)
+		if (track != PoseTrackingLocation::POSE_TRACKING_NONE)
 		{
-			info += "Found\n";
+			if (pm.m_posetracking[(int)track].m_presence == KeypointPresence::KEYPOINT_PRESENCE_PRESENT)
+			{
+				info += "Found\n";
 
-			info += std::to_string(pm.m_posetracking[(int)track].m_current.m_x) + ", " + std::to_string(pm.m_posetracking[(int)track].m_current.m_y) + "\n";
-		}
-		else
-		{
-			info += "Not Found\n";
+				info += std::to_string(pm.m_posetracking[(int)track].m_current.m_x) + ", " + std::to_string(pm.m_posetracking[(int)track].m_current.m_y) + "\n";
+			}
+			else
+			{
+				info += "Not Found\n";
+			}
 		}
 
 		std::lock_guard<std::mutex> guard(m_formmutex);
@@ -240,7 +243,7 @@ void GUIThread::ReceivePoseMovement(const PoseMovement& pm, const PoseTrackingLo
 			m_form.load()->GetLabelTrackStatus()->caption(info);
 
 		}
+
 	}
-	*/
 
 }

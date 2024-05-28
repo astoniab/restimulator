@@ -12,7 +12,7 @@
 #include <sstream>
 #include <iomanip>
 
-TCodeGenerator::TCodeGenerator() :IThread(), m_posetrackinglocation(POSE_TRACKING_NONE)
+TCodeGenerator::TCodeGenerator() :IThread(), m_posetrackinglocation(POSE_TRACKING_NONE), m_poselowvolume(true)
 {
 	m_posekeypointmapping[PoseTrackingLocation::POSE_TRACKING_HEAD].push_back(KeypointLocation::KEYPOINT_NOSE);
 	m_posekeypointmapping[PoseTrackingLocation::POSE_TRACKING_LEFT_HAND].push_back(KeypointLocation::KEYPOINT_LEFT_WRIST);
@@ -297,44 +297,74 @@ void TCodeGenerator::UpdateRestimPosePosition(const std::chrono::high_resolution
 {
 	//std::cout << "TCodeGenerator::UpdateRestimPosePosition" << std::endl;
 	std::ostringstream ostr;
-	std::lock_guard<std::mutex> guard(m_posemutex);
+	std::unique_lock<std::mutex> guard(m_posemutex);
 
 	if (!m_posemovement.empty())
 	{
 		const PoseMovement pm = m_posemovement.back();
 		const PoseTrackingData pd = pm.m_posetracking[m_posetrackinglocation];
-		if (pd.m_presence == KeypointPresence::KEYPOINT_PRESENCE_PRESENT)
+		
+		guard.unlock();
+
+		if (pm.m_timestamp > m_poselastupdate)	// don't send the same update multiple times
 		{
-			if (pd.m_current != pd.m_min && pd.m_current != pd.m_max)
+			if (pd.m_presence == KeypointPresence::KEYPOINT_PRESENCE_PRESENT)
 			{
-				const float totaldist = pd.m_min.Distance(pd.m_max);		// distance between min and max positions
-
-				// since current pos may not be on same line as min <-> max, find angle between and get component that is on line
-				float ang = atan2(pd.m_current.m_y - pd.m_min.m_y, pd.m_current.m_x - pd.m_min.m_x) - atan2(pd.m_max.m_y - pd.m_min.m_y, pd.m_max.m_x - pd.m_min.m_x);
-				if (ang < 0)
+				if (pd.m_current != pd.m_min && pd.m_current != pd.m_max)
 				{
-					ang += (M_PI * 2.0);
+					const float totaldist = pd.m_min.Distance(pd.m_max);		// distance between min and max positions
+
+					// since current pos may not be on same line as min <-> max, find angle between and get component that is on line
+					float ang = atan2(pd.m_current.m_y - pd.m_min.m_y, pd.m_current.m_x - pd.m_min.m_x) - atan2(pd.m_max.m_y - pd.m_min.m_y, pd.m_max.m_x - pd.m_min.m_x);
+					if (ang < 0)
+					{
+						ang += (M_PI * 2.0);
+					}
+					float dist = cos(ang) * pd.m_min.Distance(pd.m_current);
+
+					//std::cout << pd.m_current.m_x << "," << pd.m_current.m_y << " " << pd.m_min.m_x << "," << pd.m_min.m_y << " " << pd.m_max.m_x << "," << pd.m_max.m_y <<"   mmdist=" << pd.m_min.Distance(pd.m_max) << "  d=" << dist << "  a=" << ang << std::endl;
+
+					int32_t alphapos = (1.0 - (dist / totaldist)) * 9999.0;	// top of camera frame is y=0 and "bottom" in restim in y=0 - so we reverse position
+					int32_t betapos = ((pd.m_velocity / 2.0) + 0.5) * 9999.0;
+
+					/*
+					if (m_poselowvolume == true)
+					{
+						ostr << "A09I5000 ";		// change volume to 100% over 5 seconds
+						m_poselowvolume = false;
+					}
+					*/
+
+					ostr << "L0" << std::setw(4) << std::setfill('0') << alphapos << "I5";
+					ostr << " ";
+					ostr << "L1" << std::setw(4) << std::setfill('0') << betapos << "I5";
+
+					//debug
+					//std::cout << "Sending " << ostr.str() << " rad=" << rad << " cosf=" << cosf(rad) << " deltat=" << std::chrono::duration_cast<std::chrono::milliseconds>(thistime - lasttime).count() << std::endl;
+
+					if (m_sendtcode)
+					{
+						m_sendtcode(ostr.str());
+					}
+
 				}
-				float dist = cos(ang) * pd.m_min.Distance(pd.m_current);
+			}
+			else
+			{
+				// pose not present
 
-				//std::cout << pd.m_current.m_x << "," << pd.m_current.m_y << " " << pd.m_min.m_x << "," << pd.m_min.m_y << " " << pd.m_max.m_x << "," << pd.m_max.m_y <<"   mmdist=" << pd.m_min.Distance(pd.m_max) << "  d=" << dist << "  a=" << ang << std::endl;
-				
-				int32_t alphapos = (1.0 - (dist / totaldist)) * 9999.0;	// top of camera frame is y=0 and "bottom" in restim in y=0 - so we reverse position
-				int32_t betapos = ((pd.m_velocity / 2.0) + 0.5) * 9999.0;
+				/*
+				ostr << "A05I5000";		// change audio volume to 0.5 over 5 seconds
 
-				ostr << "L0" << std::setw(4) << std::setfill('0') << alphapos << "I5";
-				ostr << " ";
-				ostr << "L1" << std::setw(4) << std::setfill('0') << betapos << "I5";
-
-				//debug
-				//std::cout << "Sending " << ostr.str() << " rad=" << rad << " cosf=" << cosf(rad) << " deltat=" << std::chrono::duration_cast<std::chrono::milliseconds>(thistime - lasttime).count() << std::endl;
-
-				if (m_sendtcode)
+				if (m_poselowvolume == false && m_sendtcode)
 				{
 					m_sendtcode(ostr.str());
+					m_poselowvolume = true;
 				}
-			
+				*/
 			}
+
+			m_poselastupdate = pm.m_timestamp;
 		}
 	}
 
